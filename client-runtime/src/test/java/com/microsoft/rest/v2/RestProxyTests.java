@@ -187,6 +187,23 @@ public abstract class RestProxyTests {
         assertEquals("http://httpbin.org/anything?a=A&b=15", json.url);
     }
 
+    @Test
+    public void SyncGetRequestWithEncodedQueryParametersAndAnythingReturn() {
+        final HttpBinJSON json = createService(Service6.class)
+                .getAnything("A ", 15);
+        assertNotNull(json);
+        assertEquals("http://httpbin.org/anything?a=A+&b=15", json.url);
+    }
+
+    @Test
+    public void AsyncGetRequestWithEncodedQueryParametersAndAnythingReturn() {
+        final HttpBinJSON json = createService(Service6.class)
+                .getAnythingAsync("A ", 15)
+                .toBlocking().value();
+        assertNotNull(json);
+        assertEquals("http://httpbin.org/anything?a=A+&b=15", json.url);
+    }
+
     @Host("http://httpbin.org")
     private interface Service7 {
         @GET("anything")
@@ -431,6 +448,26 @@ public abstract class RestProxyTests {
         assertNotNull(json.headers);
         final HttpHeaders headers = new HttpHeaders(json.headers);
         assertEquals("MyHeaderValue", headers.value("MyHeader"));
+    }
+
+    @Host("https://httpbin.org")
+    private interface Service15 {
+        @GET("anything/{a}")
+        HttpBinJSON getAnything(@PathParam("a") String a, @QueryParam("b") String b);
+
+        @GET("anything/{a}")
+        Single<HttpBinJSON> getAnythingAsync(@PathParam("a") String a, @QueryParam("b") String b);
+    }
+
+    @Test
+    public void URLEscapeTest() {
+        final String escapable = " $&`:<>[]{}\"+#%@/;=?\\^|~',";
+        final HttpBinJSON json = createService(Service15.class)
+                .getAnythingAsync(escapable, escapable)
+                .toBlocking()
+                .value();
+        assertNotNull(json);
+        assertEquals("https://httpbin.org/anything/%20$&%60:%3C%3E%5B%5D%7B%7D%22+%23%25@%2F;=%3F%5C%5E%7C~',?+$&%60:%3C%3E%5B%5D%7B%7D%22%2B%23%25@%2F;=%3F%5C%5E%7C~',", json.url);
     }
 
     // Helpers

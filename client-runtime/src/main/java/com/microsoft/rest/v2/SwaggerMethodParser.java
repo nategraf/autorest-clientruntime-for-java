@@ -6,6 +6,7 @@
 
 package com.microsoft.rest.v2;
 
+import com.google.common.net.UrlEscapers;
 import com.microsoft.rest.v2.annotations.BodyParam;
 import com.microsoft.rest.v2.annotations.DELETE;
 import com.microsoft.rest.v2.annotations.GET;
@@ -179,7 +180,25 @@ class SwaggerMethodParser {
      * @return An Iterable with the encoded query parameters.
      */
     public Iterable<EncodedParameter> encodedQueryParameters(Object[] swaggerMethodArguments) {
-        return getEncodedParameters(querySubstitutions, swaggerMethodArguments);
+        final List<EncodedParameter> result = new ArrayList<>();
+
+        if (querySubstitutions != null) {
+            for (Substitution substitution : querySubstitutions) {
+                final int parameterIndex = substitution.methodParameterIndex();
+                if (0 <= parameterIndex && parameterIndex < swaggerMethodArguments.length) {
+                    final Object methodArgument = swaggerMethodArguments[substitution.methodParameterIndex()];
+
+                    String parameterValue = String.valueOf(methodArgument);
+                    if (substitution.shouldEncode()) {
+                        parameterValue = UrlEscapers.urlFormParameterEscaper().escape(parameterValue);
+                    }
+
+                    result.add(new EncodedParameter(substitution.urlParameterName(), parameterValue));
+                }
+            }
+        }
+
+        return result;
     }
 
     /**
@@ -246,7 +265,7 @@ class SwaggerMethodParser {
 
                     String substitutionValue = String.valueOf(methodArgument);
                     if (substitution.shouldEncode()) {
-                        substitutionValue = encode(substitutionValue);
+                        substitutionValue = UrlEscapers.urlPathSegmentEscaper().escape(substitutionValue);
                     }
 
                     result = result.replace("{" + substitution.urlParameterName() + "}", substitutionValue);
@@ -268,7 +287,7 @@ class SwaggerMethodParser {
 
                     String parameterValue = String.valueOf(methodArgument);
                     if (substitution.shouldEncode()) {
-                        parameterValue = encode(parameterValue);
+                        parameterValue = UrlEscapers.urlPathSegmentEscaper().escape(parameterValue);
                     }
 
                     result.add(new EncodedParameter(substitution.urlParameterName(), parameterValue));
@@ -277,27 +296,5 @@ class SwaggerMethodParser {
         }
 
         return result;
-    }
-
-    /**
-     * URL encode the provided value using the default (UTF-8) encoding.
-     * @param segment The value to URL encode.
-     * @return The encoded value.
-     */
-    protected static String encode(String segment) {
-        return encode(segment, "UTF-8");
-    }
-
-    /**
-     * URL encode the provided value using the provided encoding.
-     * @param segment The value to URL encode.
-     * @return The encoded value.
-     */
-    protected static String encode(String segment, String encoding) {
-        try {
-            return URLEncoder.encode(segment, encoding);
-        } catch (UnsupportedEncodingException e) {
-            return segment;
-        }
     }
 }
