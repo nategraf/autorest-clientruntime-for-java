@@ -17,6 +17,8 @@ import com.microsoft.rest.v2.annotations.PathParam;
 import com.microsoft.rest.v2.annotations.QueryParam;
 import com.microsoft.rest.v2.http.HttpClient;
 import com.microsoft.rest.v2.http.HttpHeaders;
+import com.microsoft.rest.v2.http.HttpRequest;
+import com.microsoft.rest.v2.http.HttpResponse;
 import org.junit.Test;
 import rx.Completable;
 import rx.Single;
@@ -459,15 +461,34 @@ public abstract class RestProxyTests {
         Single<HttpBinJSON> getAnythingAsync(@PathParam("a") String a, @QueryParam("b") String b);
     }
 
+    class HttpRequestAuditor extends HttpClient {
+        private final HttpClient innerClient;
+        HttpRequest request;
+
+        HttpRequestAuditor(HttpClient innerClient) {
+            this.innerClient = innerClient;
+        }
+
+        @Override
+        public Single<? extends HttpResponse> sendRequestAsync(HttpRequest request) {
+            this.request = request;
+            return innerClient.sendRequestAsync(request);
+        }
+    }
+
     @Test
     public void URLEscapeTest() {
-        final String escapable = " $&`:<>[]{}\"+#%@/;=?\\^|~',";
-        final HttpBinJSON json = createService(Service15.class)
+        final String escapable = "$ &`:<>[]{}\"+#%@/;=?\\^|~',";
+        final HttpRequestAuditor auditor = new HttpRequestAuditor(createHttpClient());
+        final HttpBinJSON json = RestProxy.create(Service15.class, auditor, serializer)
                 .getAnythingAsync(escapable, escapable)
                 .toBlocking()
                 .value();
+
         assertNotNull(json);
-        assertEquals("https://httpbin.org/anything/%20$&%60:%3C%3E%5B%5D%7B%7D%22+%23%25@%2F;=%3F%5C%5E%7C~',?+$&%60:%3C%3E%5B%5D%7B%7D%22%2B%23%25@%2F;=%3F%5C%5E%7C~',", json.url);
+        assertEquals(
+                "https://httpbin.org/anything/%24%20%26%60%3A%3C%3E%5B%5D%7B%7D%22%2B%23%25%40%2F?%24+%26%60%3A%3C%3E%5B%5D%7B%7D%22%2B%23%25%40%2F",
+                auditor.request.url());
     }
 
     // Helpers
