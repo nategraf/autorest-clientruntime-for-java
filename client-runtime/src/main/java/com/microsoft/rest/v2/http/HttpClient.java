@@ -25,6 +25,7 @@ public abstract class HttpClient {
     private static HttpClient.Factory defaultHttpClientFactory() {
         if (defaultFactory == null) {
             defaultFactory = new NettyClient.Factory();
+            //defaultFactory = new URLConnectionHttpClient.Factory();
         }
         return defaultFactory;
     }

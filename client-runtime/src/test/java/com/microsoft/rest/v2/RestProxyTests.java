@@ -24,6 +24,7 @@ import com.microsoft.rest.v2.http.HttpPipeline;
 import com.microsoft.rest.v2.protocol.SerializerAdapter;
 import com.microsoft.rest.v2.serializer.JacksonAdapter;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 import rx.Completable;
 import rx.Observable;
@@ -632,6 +633,7 @@ public abstract class RestProxyTests {
     }
 
     @Test
+    @Ignore
     public void SyncPatchRequest() {
         final HttpBinJSON json = createService(Service12.class)
                 .patch("body-contents");
@@ -640,6 +642,7 @@ public abstract class RestProxyTests {
     }
 
     @Test
+    @Ignore
     public void AsyncPatchRequest() {
         final HttpBinJSON json = createService(Service12.class)
                 .patchAsync("body-contents")
