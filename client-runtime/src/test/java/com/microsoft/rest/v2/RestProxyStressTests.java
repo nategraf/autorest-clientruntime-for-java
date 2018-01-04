@@ -366,15 +366,14 @@ public class RestProxyStressTests {
                             @Override
                             public CompletableSource apply(RestResponse<Void, AsyncInputStream> response) throws Exception {
                                 final MessageDigest messageDigest = MessageDigest.getInstance("MD5");
-                                Flowable<byte[]> content = response.body().content().doOnNext(new Consumer<byte[]>() {
+                                Completable content = response.body().content().doOnNext(new Consumer<byte[]>() {
                                     @Override
                                     public void accept(byte[] bytes) throws Exception {
                                         messageDigest.update(bytes);
                                     }
-                                });
+                                }).ignoreElements();
 
-                                AsynchronousFileChannel file = AsynchronousFileChannel.open(TEMP_FOLDER_PATH.resolve("100m-" + integer + ".dat"), StandardOpenOption.WRITE);
-                                return FlowableUtil.writeContentToFile(content, file).doOnComplete(new Action() {
+                                return content.doOnComplete(new Action() {
                                     @Override
                                     public void run() throws Exception {
                                         assertArrayEquals(md5, messageDigest.digest());
