@@ -67,7 +67,6 @@ import java.util.concurrent.*;
 import static org.junit.Assert.assertArrayEquals;
 
 @SuppressWarnings("Duplicates")
-@Ignore("Should only be run manually")
 public class RestProxyStressTests {
     static class AddDatePolicy implements RequestPolicy {
         private final DateTimeFormatter format = DateTimeFormat
@@ -140,7 +139,7 @@ public class RestProxyStressTests {
         }
     }
 
-    @Host("http://javasdktest.blob.core.windows.net")
+    @Host("http://hbenchmark.blob.core.windows.net")
     interface IOService {
         @ExpectedResponses({ 201 })
         @PUT("/javasdktest/upload/100m-{id}.dat?{sas}")
@@ -154,7 +153,7 @@ public class RestProxyStressTests {
         Single<RestResponse<Void, AsyncInputStream>> download100M(@PathParam("id") String id, @PathParam(value = "sas", encoded = true) String sas);
     }
 
-    private static final Path TEMP_FOLDER_PATH = Paths.get("temp");
+    private static final Path TEMP_FOLDER_PATH = Paths.get(System.getProperty("java.io.tmpdir")).resolve("storage-benchmark");
     private static final int NUM_FILES = 100;
     private static final int FILE_SIZE = 1024 * 1024 * 100;
     private static final int CHUNK_SIZE = 8192;
