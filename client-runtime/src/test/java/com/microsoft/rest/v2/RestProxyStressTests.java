@@ -142,14 +142,14 @@ public class RestProxyStressTests {
     @Host("http://hbenchmark.blob.core.windows.net")
     interface IOService {
         @ExpectedResponses({ 201 })
-        @PUT("/javasdktest/upload/100m-{id}.dat?{sas}")
+        @PUT("/sdkbenchmark/upload/100m-{id}.dat?{sas}")
         Single<RestResponse<Void, Void>> upload100MB(@PathParam("id") String id, @PathParam(value = "sas", encoded = true) String sas, @HeaderParam("x-ms-blob-type") String blobType, @BodyParam(ContentType.APPLICATION_OCTET_STREAM) AsyncInputStream stream);
 
         @ExpectedResponses({ 201 })
-        @PUT("/javasdktest/upload/100m-{id}.dat?{sas}")
+        @PUT("/sdkbenchmark/upload/100m-{id}.dat?{sas}")
         Single<RestResponse<Void, Void>> upload100MBFile(@PathParam("id") String id, @PathParam(value = "sas", encoded = true) String sas, @HeaderParam("x-ms-blob-type") String blobType, @BodyParam(ContentType.APPLICATION_OCTET_STREAM) FileSegment segment);
 
-        @GET("/javasdktest/upload/100m-{id}.dat?{sas}")
+        @GET("/sdkbenchmark/upload/100m-{id}.dat?{sas}")
         Single<RestResponse<Void, AsyncInputStream>> download100M(@PathParam("id") String id, @PathParam(value = "sas", encoded = true) String sas);
     }
 
