@@ -63,6 +63,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Random;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.Assert.assertArrayEquals;
 
@@ -384,8 +385,15 @@ public class RestProxyStressTests {
                         });
                     }
                 }).flatMapCompletable(Functions.<Completable>identity(), false, 30).blockingAwait();
-        String downloadTimeTakenString = PeriodFormat.getDefault().print(new Duration(downloadStart, Instant.now()).toPeriod());
-        LoggerFactory.getLogger(getClass()).info("Download took " + downloadTimeTakenString);
+        Duration downloadDuration = new Duration(downloadStart, Instant.now());
+        String downloadTimeTakenString = PeriodFormat.getDefault().print(downloadDuration.toPeriod());
+        Double averageRate = (10.0 * 1024 * 8 /*10GB in Mb*/) / downloadDuration.getStandardSeconds();
+        LoggerFactory.getLogger(getClass()).info("Download took " + downloadTimeTakenString + " for an average rate of " + averageRate.toString());
+
+        final String benchmarkOutputPath = System.getenv("JAVA_SDK_BENCHMARK_FILE");
+        if (benchmarkOutputPath != null) {
+            Files.write(Paths.get(benchmarkOutputPath), (averageRate.toString() + "\n").getBytes(), StandardOpenOption.APPEND);
+        }
     }
 
     @Test
