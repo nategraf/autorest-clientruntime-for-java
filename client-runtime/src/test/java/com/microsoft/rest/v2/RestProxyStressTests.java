@@ -143,14 +143,14 @@ public class RestProxyStressTests {
     @Host("http://hbenchmark.blob.core.windows.net")
     interface IOService {
         @ExpectedResponses({ 201 })
-        @PUT("/sdkbenchmark/upload/100m-{id}.dat?{sas}")
+        @PUT("/sdkbenchmark2/upload/100m-{id}.dat?{sas}")
         Single<RestResponse<Void, Void>> upload100MB(@PathParam("id") String id, @PathParam(value = "sas", encoded = true) String sas, @HeaderParam("x-ms-blob-type") String blobType, @BodyParam(ContentType.APPLICATION_OCTET_STREAM) AsyncInputStream stream);
 
         @ExpectedResponses({ 201 })
-        @PUT("/sdkbenchmark/upload/100m-{id}.dat?{sas}")
+        @PUT("/sdkbenchmark2/upload/100m-{id}.dat?{sas}")
         Single<RestResponse<Void, Void>> upload100MBFile(@PathParam("id") String id, @PathParam(value = "sas", encoded = true) String sas, @HeaderParam("x-ms-blob-type") String blobType, @BodyParam(ContentType.APPLICATION_OCTET_STREAM) FileSegment segment);
 
-        @GET("/sdkbenchmark/upload/100m-{id}.dat?{sas}")
+        @GET("/sdkbenchmark2/upload/100m-{id}.dat?{sas}")
         Single<RestResponse<Void, AsyncInputStream>> download100M(@PathParam("id") String id, @PathParam(value = "sas", encoded = true) String sas);
     }
 
@@ -384,10 +384,10 @@ public class RestProxyStressTests {
                             }
                         });
                     }
-                }).flatMapCompletable(Functions.<Completable>identity(), false, 30).blockingAwait();
+                }).flatMapCompletable(Functions.<Completable>identity(), false, 100).blockingAwait();
         Duration downloadDuration = new Duration(downloadStart, Instant.now());
         String downloadTimeTakenString = PeriodFormat.getDefault().print(downloadDuration.toPeriod());
-        Double averageRate = (10.0 * 1024 * 8 /*10GB in Mb*/) / downloadDuration.getStandardSeconds();
+        Double averageRate = (100.0 * NUM_FILES * 8) / (downloadDuration.getMillis() / 1000.0);
         LoggerFactory.getLogger(getClass()).info("Download took " + downloadTimeTakenString + " for an average rate of " + averageRate.toString());
 
         final String benchmarkOutputPath = System.getenv("JAVA_SDK_BENCHMARK_FILE");
