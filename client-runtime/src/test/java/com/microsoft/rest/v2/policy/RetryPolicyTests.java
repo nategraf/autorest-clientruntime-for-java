@@ -13,6 +13,8 @@ import org.junit.Test;
 
 import io.reactivex.Single;
 
+import java.net.URL;
+
 public class RetryPolicyTests {
     @Test
     public void exponentialRetryEndOn501() throws Exception {
@@ -26,13 +28,13 @@ public class RetryPolicyTests {
                     return Single.<HttpResponse>just(new MockHttpResponse(codes[count++]));
                 }
             },
-            new RetryPolicy.Factory(3));
+            new RetryPolicyFactory(3));
 
         HttpResponse response = pipeline.sendRequestAsync(
                 new HttpRequest(
                         "exponentialRetryEndOn501",
-                        "GET",
-                        "http://localhost/")).blockingGet();
+                        HttpMethod.GET,
+                        new URL("http://localhost/"))).blockingGet();
 
         Assert.assertEquals(501, response.statusCode());
     }
@@ -50,13 +52,13 @@ public class RetryPolicyTests {
                     return Single.<HttpResponse>just(new MockHttpResponse(500));
                 }
             },
-            new RetryPolicy.Factory(maxRetries));
+            new RetryPolicyFactory(maxRetries));
 
         HttpResponse response = pipeline.sendRequestAsync(
                 new HttpRequest(
                         "exponentialRetryMax",
-                        "GET",
-                        "http://localhost/")).blockingGet();
+                        HttpMethod.GET,
+                        new URL("http://localhost/"))).blockingGet();
 
         Assert.assertEquals(500, response.statusCode());
     }

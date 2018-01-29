@@ -13,9 +13,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelOption;
-import io.netty.channel.DefaultFileRegion;
 import io.netty.channel.EventLoop;
-import io.netty.channel.FileRegion;
 import io.netty.channel.MultithreadEventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.pool.AbstractChannelPoolHandler;
@@ -32,7 +30,6 @@ import io.netty.handler.codec.http.HttpRequestEncoder;
 import io.netty.handler.codec.http.HttpResponseDecoder;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
-import io.netty.handler.ssl.SslHandler;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import io.reactivex.Flowable;
@@ -41,7 +38,6 @@ import io.reactivex.Scheduler;
 import io.reactivex.Single;
 import io.reactivex.SingleEmitter;
 import io.reactivex.SingleOnSubscribe;
-import io.reactivex.exceptions.Exceptions;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Function;
 import io.reactivex.schedulers.Schedulers;
@@ -170,17 +166,11 @@ public final class NettyClient extends HttpClient {
             this.channelPool = createChannelPool(this, config, channelPoolSize);
         }
 
-        private boolean useZeroCopy(Channel channel) {
-            boolean isSSL = channel.pipeline().get(SslHandler.class) != null;
-            boolean isNativeTransport = eventLoopGroup.getClass().getName().equals(EPOLL_GROUP_CLASS_NAME) || eventLoopGroup.getClass().getName().equals(KQUEUE_GROUP_CLASS_NAME);
-            return !isSSL && isNativeTransport;
-        }
-
         private Single<HttpResponse> sendRequestInternalAsync(final HttpRequest request, final Proxy proxy) {
             final URI channelAddress;
             try {
                 if (proxy == null) {
-                    channelAddress = new URI(request.url());
+                    channelAddress = request.url().toURI();
                 } else if (proxy.address() instanceof InetSocketAddress) {
                     InetSocketAddress address = (InetSocketAddress) proxy.address();
                     String scheme = address.getPort() == 443
@@ -246,7 +236,7 @@ public final class NettyClient extends HttpClient {
                                 }
                             });
 
-                            if (request.httpMethod().equalsIgnoreCase("HEAD")) {
+                            if (request.httpMethod() == com.microsoft.rest.v2.http.HttpMethod.HEAD) {
                                 // Use HttpClientCodec for HEAD operations
                                 if (channel.pipeline().get("HttpClientCodec") == null) {
                                     channel.pipeline().remove(HttpRequestEncoder.class);
@@ -261,8 +251,8 @@ public final class NettyClient extends HttpClient {
                             }
 
                             final DefaultHttpRequest raw = new DefaultHttpRequest(HttpVersion.HTTP_1_1,
-                                    HttpMethod.valueOf(request.httpMethod()),
-                                    request.url());
+                                    HttpMethod.valueOf(request.httpMethod().toString()),
+                                    request.url().toString());
 
                             for (HttpHeader header : request.headers()) {
                                 raw.headers().add(header.name(), header.value());
@@ -291,36 +281,15 @@ public final class NettyClient extends HttpClient {
                                                 }
                                             }
                                         });
-                            } else if (request.body() instanceof FileRequestBody && useZeroCopy(channel)) {
-                                FileSegment segment = ((FileRequestBody) request.body()).fileSegment();
-                                FileRegion region = new DefaultFileRegion(segment.fileChannel(), segment.offset(), segment.length());
-                                channel.write(region);
-                                channel.writeAndFlush(DefaultLastHttpContent.EMPTY_LAST_CONTENT)
-                                        .addListener(new GenericFutureListener<Future<? super Void>>() {
-                                            @Override
-                                            public void operationComplete(Future<? super Void> future) throws Exception {
-                                                if (!future.isSuccess()) {
-                                                    channelPool.closeAndRelease(channel);
-                                                    emitErrorIfSubscribed(future.cause());
-                                                } else {
-                                                    channel.read();
-                                                }
-                                            }
-                                        });
-
                             } else {
-                                Flowable<ByteBuf> bodyContent;
-                                if (request.body() instanceof FileRequestBody) {
-                                    bodyContent = ((FileRequestBody) request.body()).pooledContent();
-                                } else {
-                                    bodyContent = request.body().content().map(new Function<byte[], ByteBuf>() {
-                                        @Override
-                                        public ByteBuf apply(byte[] bytes) throws Exception {
-                                            return Unpooled.wrappedBuffer(bytes);
-                                        }
-                                    });
-                                }
-                                bodyContent.observeOn(Schedulers.from(channel.eventLoop())).subscribe(new FlowableSubscriber<ByteBuf>() {
+                                Flowable<ByteBuf> byteBufContent = request.body().map(new Function<byte[], ByteBuf>() {
+                                    @Override
+                                    public ByteBuf apply(byte[] bytes) throws Exception {
+                                        return Unpooled.wrappedBuffer(bytes);
+                                    }
+                                });
+
+                                byteBufContent.observeOn(Schedulers.from(channel.eventLoop())).subscribe(new FlowableSubscriber<ByteBuf>() {
                                     Subscription subscription;
                                     @Override
                                     public void onSubscribe(Subscription s) {
@@ -388,7 +357,7 @@ public final class NettyClient extends HttpClient {
                         LoggerFactory.getLogger(getClass()).warn("Got EncoderException: " + throwable.getMessage());
                         return sendRequestInternalAsync(request, proxy);
                     } else {
-                        throw Exceptions.propagate(throwable);
+                        return Single.error(throwable);
                     }
                 }
             });
@@ -421,12 +390,12 @@ public final class NettyClient extends HttpClient {
 
         @Override
         protected void subscribeActual(Subscriber<? super ByteBuf> s) {
-            if (subscriber != null) {
-                throw new IllegalStateException("Multiple subscription not allowed for response content.");
+            if (subscriber == null) {
+                subscriber = s;
+                subscriber.onSubscribe(this);
+            } else {
+                s.onError(new IllegalStateException("Multiple subscription not allowed for response content."));
             }
-
-            subscriber = s;
-            s.onSubscribe(this);
         }
 
         @Override

@@ -19,6 +19,7 @@ import com.microsoft.azure.v2.LocationPollStrategy;
 import com.microsoft.rest.v2.http.HttpClient;
 import com.microsoft.rest.v2.http.HttpHeader;
 import com.microsoft.rest.v2.http.HttpHeaders;
+import com.microsoft.rest.v2.http.HttpMethod;
 import com.microsoft.rest.v2.http.HttpRequest;
 import com.microsoft.rest.v2.http.HttpResponse;
 import com.microsoft.rest.v2.util.FlowableUtil;
@@ -30,6 +31,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URI;
+import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -65,7 +67,7 @@ public class MockAzureHttpClient extends HttpClient {
         MockAzureHttpResponse response = null;
 
         try {
-            final URI requestUrl = new URI(request.url());
+            final URL requestUrl = request.url();
             final String requestHost = requestUrl.getHost();
             final String requestPath = requestUrl.getPath();
             final String requestPathLower = requestPath.toLowerCase();
@@ -75,7 +77,7 @@ public class MockAzureHttpClient extends HttpClient {
                         response = new MockAzureHttpResponse(200, responseHeaders(), "");
                     } else {
                         final HttpBinJSON json = new HttpBinJSON();
-                        json.url = request.url()
+                        json.url = request.url().toString()
                                 // This is just to mimic the behavior we've seen with httpbin.org.
                                 .replace("%20", " ");
                         json.headers = toMap(request.headers());
@@ -89,31 +91,31 @@ public class MockAzureHttpClient extends HttpClient {
                 }
                 else if (requestPathLower.equals("/delete")) {
                     final HttpBinJSON json = new HttpBinJSON();
-                    json.url = request.url();
+                    json.url = request.url().toString();
                     json.data = bodyToString(request);
                     response = new MockAzureHttpResponse(200, responseHeaders(), json);
                 }
                 else if (requestPathLower.equals("/get")) {
                     final HttpBinJSON json = new HttpBinJSON();
-                    json.url = request.url();
+                    json.url = request.url().toString();
                     json.headers = toMap(request.headers());
                     response = new MockAzureHttpResponse(200, responseHeaders(), json);
                 }
                 else if (requestPathLower.equals("/patch")) {
                     final HttpBinJSON json = new HttpBinJSON();
-                    json.url = request.url();
+                    json.url = request.url().toString();
                     json.data = bodyToString(request);
                     response = new MockAzureHttpResponse(200, responseHeaders(), json);
                 }
                 else if (requestPathLower.equals("/post")) {
                     final HttpBinJSON json = new HttpBinJSON();
-                    json.url = request.url();
+                    json.url = request.url().toString();
                     json.data = bodyToString(request);
                     response = new MockAzureHttpResponse(200, responseHeaders(), json);
                 }
                 else if (requestPathLower.equals("/put")) {
                     final HttpBinJSON json = new HttpBinJSON();
-                    json.url = request.url();
+                    json.url = request.url().toString();
                     json.data = bodyToString(request);
                     response = new MockAzureHttpResponse(200, responseHeaders(), json);
                 }
@@ -124,7 +126,7 @@ public class MockAzureHttpClient extends HttpClient {
                 }
             }
             else if (requestHost.equalsIgnoreCase("mock.azure.com")) {
-                if (request.httpMethod().equalsIgnoreCase("GET")) {
+                if (request.httpMethod() == HttpMethod.GET) {
                     if (requestPathLower.contains("/mockprovider/mockresources/")) {
                         ++getRequests;
                         --pollsRemaining;
@@ -166,12 +168,12 @@ public class MockAzureHttpClient extends HttpClient {
                             else {
                                 --pollsRemaining;
                                 response = new MockAzureHttpResponse(202, responseHeaders())
-                                        .withHeader(LocationPollStrategy.HEADER_NAME, request.url());
+                                        .withHeader(LocationPollStrategy.HEADER_NAME, request.url().toString());
                             }
                         }
                     }
                 }
-                else if (request.httpMethod().equalsIgnoreCase("PUT")) {
+                else if (request.httpMethod() == HttpMethod.PUT) {
                     ++createRequests;
 
                     final Map<String, String> requestQueryMap = queryToMap(requestUrl.getQuery());
@@ -232,7 +234,7 @@ public class MockAzureHttpClient extends HttpClient {
                         }
                     }
                 }
-                else if (request.httpMethod().equalsIgnoreCase("DELETE")) {
+                else if (request.httpMethod() == HttpMethod.DELETE) {
                     ++deleteRequests;
 
                     final Map<String,String> requestQueryMap = queryToMap(requestUrl.getQuery());
@@ -301,7 +303,7 @@ public class MockAzureHttpClient extends HttpClient {
     }
 
     private static String bodyToString(HttpRequest request) throws IOException {
-        Single<String> asyncString = FlowableUtil.collectBytes(request.body().content()).map(new Function<byte[], String>() {
+        Single<String> asyncString = FlowableUtil.collectBytes(request.body()).map(new Function<byte[], String>() {
             @Override
             public String apply(byte[] bytes) throws Exception {
                 return new String(bytes, Charsets.UTF_8);

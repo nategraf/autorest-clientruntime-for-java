@@ -8,20 +8,23 @@ package com.microsoft.azure.v2;
 
 import com.microsoft.rest.v2.RestProxy;
 import com.microsoft.rest.v2.SwaggerMethodParser;
+import com.microsoft.rest.v2.http.HttpMethod;
 import com.microsoft.rest.v2.http.HttpRequest;
 import com.microsoft.rest.v2.http.HttpResponse;
 import io.reactivex.Single;
 import io.reactivex.functions.Function;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
 
 /**
  * A PollStrategy type that uses the Azure-AsyncOperation header value to check the status of a long
  * running operation.
  */
 public final class AzureAsyncOperationPollStrategy extends PollStrategy {
-    private final String operationResourceUrl;
-    private final String originalResourceUrl;
+    private final URL operationResourceUrl;
+    private final URL originalResourceUrl;
 
     private boolean pollingCompleted;
     private boolean pollingSucceeded;
@@ -42,7 +45,7 @@ public final class AzureAsyncOperationPollStrategy extends PollStrategy {
      * @param delayInMilliseconds The delay (in milliseconds) that the pollStrategy will use when
      *                            polling.
      */
-    private AzureAsyncOperationPollStrategy(RestProxy restProxy, SwaggerMethodParser methodParser, String operationResourceUrl, String originalResourceUrl, long delayInMilliseconds) {
+    private AzureAsyncOperationPollStrategy(RestProxy restProxy, SwaggerMethodParser methodParser, URL operationResourceUrl, URL originalResourceUrl, long delayInMilliseconds) {
         super(restProxy, methodParser, delayInMilliseconds);
 
         this.operationResourceUrl = operationResourceUrl;
@@ -51,7 +54,7 @@ public final class AzureAsyncOperationPollStrategy extends PollStrategy {
 
     @Override
     public HttpRequest createPollRequest() {
-        String pollUrl;
+        URL pollUrl;
         if (!pollingCompleted) {
             pollUrl = operationResourceUrl;
         }
@@ -61,7 +64,7 @@ public final class AzureAsyncOperationPollStrategy extends PollStrategy {
             throw new IllegalStateException("Polling is completed and did not succeed. Cannot create a polling request.");
         }
 
-        return new HttpRequest(fullyQualifiedMethodName(), "GET", pollUrl);
+        return new HttpRequest(fullyQualifiedMethodName(), HttpMethod.GET, pollUrl);
     }
 
     @Override
@@ -146,8 +149,14 @@ public final class AzureAsyncOperationPollStrategy extends PollStrategy {
      *                            use when polling.
      */
     static PollStrategy tryToCreate(RestProxy restProxy, SwaggerMethodParser methodParser, HttpRequest originalHttpRequest, HttpResponse httpResponse, long delayInMilliseconds) {
-        final String azureAsyncOperationUrl = getHeader(httpResponse);
-        return azureAsyncOperationUrl != null && !azureAsyncOperationUrl.isEmpty()
+        URL azureAsyncOperationUrl = null;
+
+        try {
+            azureAsyncOperationUrl = new URL(getHeader(httpResponse));
+        } catch (MalformedURLException ignored) {
+        }
+
+        return azureAsyncOperationUrl != null
                 ? new AzureAsyncOperationPollStrategy(restProxy, methodParser, azureAsyncOperationUrl, originalHttpRequest.url(), delayInMilliseconds)
                 : null;
     }

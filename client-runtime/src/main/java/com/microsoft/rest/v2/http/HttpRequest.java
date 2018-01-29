@@ -6,20 +6,20 @@
 
 package com.microsoft.rest.v2.http;
 
-import com.google.common.base.Charsets;
 import io.reactivex.Flowable;
 
-import java.io.IOException;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 
 /**
  * This class contains all of the details necessary for sending a HTTP request through a HttpClient.
  */
 public class HttpRequest {
     private String callerMethod;
-    private String httpMethod;
-    private String url;
+    private HttpMethod httpMethod;
+    private URL url;
     private HttpHeaders headers;
-    private HttpRequestBody body;
+    private Flowable<byte[]> body;
 
     /**
      * Create a new HttpRequest object with the provided HTTP method (GET, POST, PUT, etc.) and the
@@ -28,7 +28,7 @@ public class HttpRequest {
      * @param httpMethod The HTTP method to use with this request.
      * @param url The URL where this HTTP request should be sent to.
      */
-    public HttpRequest(String callerMethod, String httpMethod, String url) {
+    public HttpRequest(String callerMethod, HttpMethod httpMethod, URL url) {
         this.callerMethod = callerMethod;
         this.httpMethod = httpMethod;
         this.url = url;
@@ -44,7 +44,7 @@ public class HttpRequest {
      * @param headers The HTTP headers to use with this request.
      * @param body The body of this HTTP request.
      */
-    public HttpRequest(String callerMethod, String httpMethod, String url, HttpHeaders headers, HttpRequestBody body) {
+    public HttpRequest(String callerMethod, HttpMethod httpMethod, URL url, HttpHeaders headers, Flowable<byte[]> body) {
         this.callerMethod = callerMethod;
         this.httpMethod = httpMethod;
         this.url = url;
@@ -74,7 +74,7 @@ public class HttpRequest {
      * Get the HTTP method that this request will use.
      * @return The HTTP method that this request will use.
      */
-    public String httpMethod() {
+    public HttpMethod httpMethod() {
         return httpMethod;
     }
 
@@ -83,7 +83,7 @@ public class HttpRequest {
      * @param httpMethod The HTTP method to use, e.g. "GET".
      * @return This HttpRequest so that multiple operations can be chained together.
      */
-    public HttpRequest withHttpMethod(String httpMethod) {
+    public HttpRequest withHttpMethod(HttpMethod httpMethod) {
         this.httpMethod = httpMethod;
         return this;
     }
@@ -92,7 +92,7 @@ public class HttpRequest {
      * Get the URL that this request will be sent to.
      * @return The URL that this request will be sent to.
      */
-    public String url() {
+    public URL url() {
         return url;
     }
 
@@ -101,7 +101,7 @@ public class HttpRequest {
      * @param url The new URL that this request will be sent to.
      * @return This HttpRequest so that multiple operations can be chained together.
      */
-    public HttpRequest withUrl(String url) {
+    public HttpRequest withUrl(URL url) {
         this.url = url;
         return this;
     }
@@ -139,39 +139,40 @@ public class HttpRequest {
      * Get the body for this HttpRequest.
      * @return The body for this HttpRequest.
      */
-    public HttpRequestBody body() {
+    public Flowable<byte[]> body() {
         return body;
     }
 
     /**
      * Set the body of this HTTP request.
      * @param body The body of this HTTP request.
-     * @param mimeContentType The MIME Content-Type of the body's contents.
      * @return This HttpRequest so that multiple operations can be chained together.
      */
-    public HttpRequest withBody(String body, String mimeContentType) {
-        final byte[] bodyBytes = body.getBytes(Charsets.UTF_8);
-        return withBody(bodyBytes, mimeContentType);
+    public HttpRequest withBody(String body) {
+        final byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+        return withBody(bodyBytes);
     }
 
     /**
-     * Set the body of this HTTP request.
+     * Set the body of this HTTP request, automatically setting the Content-Length header based on the given body's length.
+     *
      * @param body The body of this HTTP request.
-     * @param mimeContentType The MIME Content-Type of the body's contents.
      * @return This HttpRequest so that multiple operations can be chained together.
      */
-    public HttpRequest withBody(byte[] body, String mimeContentType) {
-        return withBody(new FlowableHttpRequestBody(body.length, mimeContentType, Flowable.just(body), true));
+    public HttpRequest withBody(byte[] body) {
+        headers.set("Content-Length", String.valueOf(body.length));
+        return withBody(Flowable.just(body));
     }
 
     /**
-     * Set the body of this HTTP request.
+     * Set the body of this HTTP request, leaving request headers unmodified.
+     * Users must set the Content-Length header to indicate the length of the new body, or use Transfer-Encoding: chunked.
+     *
      * @param body The body of this HTTP request.
      * @return This HttpRequest so that multiple operations can be chained together.
      */
-    public HttpRequest withBody(HttpRequestBody body) {
+    public HttpRequest withBody(Flowable<byte[]> body) {
         this.body = body;
-        headers.set("Content-Length", String.valueOf(body.contentLength()));
         return this;
     }
 
@@ -181,13 +182,9 @@ public class HttpRequest {
      * that the buffered HttpHeaders and body must not be able to change from side effects of
      * this HttpRequest.
      * @return A new HTTP request instance with cloned instances of all mutable properties.
-     * @throws IOException if the request body fails to buffer.
      */
-    public HttpRequest buffer() throws IOException {
+    public HttpRequest buffer() {
         final HttpHeaders bufferedHeaders = new HttpHeaders(headers);
-        // If calling buffer() will consume the body, then we need to set this
-        // HttpRequest's body to be the buffered body too.
-        body = (body == null ? null : body.buffer());
         return new HttpRequest(callerMethod, httpMethod, url, bufferedHeaders, body);
     }
 }

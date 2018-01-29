@@ -12,14 +12,16 @@ import com.microsoft.azure.v2.annotations.AzureHost;
 import com.microsoft.azure.v2.serializer.AzureJacksonAdapter;
 import com.microsoft.rest.v2.credentials.ServiceClientCredentials;
 import com.microsoft.rest.v2.http.HttpClient;
+import com.microsoft.rest.v2.http.HttpMethod;
 import com.microsoft.rest.v2.http.HttpPipeline;
 import com.microsoft.rest.v2.http.HttpPipelineBuilder;
 import com.microsoft.rest.v2.http.NettyClient;
-import com.microsoft.rest.v2.policy.AddCookiesPolicy;
-import com.microsoft.rest.v2.policy.CredentialsPolicy;
-import com.microsoft.rest.v2.policy.LoggingPolicy;
+import com.microsoft.rest.v2.policy.CookiePolicyFactory;
+import com.microsoft.rest.v2.policy.CredentialsPolicyFactory;
+import com.microsoft.rest.v2.policy.HttpLogDetailLevel;
+import com.microsoft.rest.v2.policy.HttpLoggingPolicyFactory;
 import com.microsoft.rest.v2.policy.RequestPolicyFactory;
-import com.microsoft.rest.v2.policy.RetryPolicy;
+import com.microsoft.rest.v2.policy.RetryPolicyFactory;
 import com.microsoft.rest.v2.protocol.SerializerAdapter;
 import com.microsoft.rest.v2.InvalidReturnTypeException;
 import com.microsoft.rest.v2.RestProxy;
@@ -28,7 +30,9 @@ import com.microsoft.rest.v2.SwaggerMethodParser;
 import com.microsoft.rest.v2.http.HttpRequest;
 import com.microsoft.rest.v2.http.HttpResponse;
 import io.reactivex.Observable;
+import io.reactivex.ObservableSource;
 import io.reactivex.Single;
+import io.reactivex.SingleSource;
 import io.reactivex.exceptions.Exceptions;
 import io.reactivex.functions.Function;
 
@@ -38,6 +42,7 @@ import java.lang.reflect.Proxy;
 import java.lang.reflect.Type;
 import java.net.NetworkInterface;
 import java.util.Enumeration;
+import java.util.concurrent.Callable;
 
 /**
  * This class can be used to create an Azure specific proxy implementation for a provided Swagger
@@ -155,7 +160,7 @@ public final class AzureProxy extends RestProxy {
      * @return the default HttpPipeline.
      */
     public static HttpPipeline createDefaultPipeline(Class<?> swaggerInterface, ServiceClientCredentials credentials) {
-        return createDefaultPipeline(swaggerInterface, new CredentialsPolicy.Factory(credentials));
+        return createDefaultPipeline(swaggerInterface, new CredentialsPolicyFactory(credentials));
     }
 
     /**
@@ -170,12 +175,12 @@ public final class AzureProxy extends RestProxy {
         final HttpClient httpClient = new NettyClient.Factory().create(null);
         final HttpPipelineBuilder builder = new HttpPipelineBuilder().withHttpClient(httpClient);
         builder.withUserAgent(getDefaultUserAgentString(swaggerInterface));
-        builder.withRequestPolicy(new RetryPolicy.Factory());
-        builder.withRequestPolicy(new AddCookiesPolicy.Factory());
+        builder.withRequestPolicy(new RetryPolicyFactory());
+        builder.withRequestPolicy(new CookiePolicyFactory());
         if (credentialsPolicy != null) {
             builder.withRequestPolicy(credentialsPolicy);
         }
-        builder.withRequestPolicy(new LoggingPolicy.Factory(LoggingPolicy.LogLevel.HEADERS));
+        builder.withRequestPolicy(new HttpLoggingPolicyFactory(HttpLogDetailLevel.HEADERS));
         return builder.build();
     }
 
@@ -246,14 +251,31 @@ public final class AzureProxy extends RestProxy {
             }
             else {
                 final Type operationStatusResultType = ((ParameterizedType) operationStatusType).getActualTypeArguments()[0];
-                result = createPollStrategy(httpRequest, asyncHttpResponse, methodParser)
-                            .toObservable()
-                            .flatMap(new Function<PollStrategy, Observable<OperationStatus<Object>>>() {
-                                @Override
-                                public Observable<OperationStatus<Object>> apply(final PollStrategy pollStrategy) {
-                                    return pollStrategy.pollUntilDoneWithStatusUpdates(httpRequest, methodParser, operationStatusResultType);
-                                }
-                            });
+                result = asyncHttpResponse.flatMapObservable(new Function<HttpResponse, ObservableSource<?>>() {
+                    @Override
+                    public ObservableSource<?> apply(HttpResponse httpResponse) throws Exception {
+                        final HttpResponse bufferedHttpResponse = httpResponse.buffer();
+                        return createPollStrategy(httpRequest, Single.just(bufferedHttpResponse), methodParser).flatMapObservable(new Function<PollStrategy, ObservableSource<OperationStatus<?>>>() {
+                            @Override
+                            public ObservableSource<OperationStatus<?>> apply(final PollStrategy pollStrategy) throws Exception {
+                                Observable<OperationStatus<?>> first = handleBodyReturnTypeAsync(bufferedHttpResponse, methodParser, operationStatusResultType)
+                                        .map(new Function<Object, OperationStatus<?>>() {
+                                            @Override
+                                            public OperationStatus<?> apply(Object operationResult) throws Exception {
+                                                return new OperationStatus<>(operationResult, pollStrategy.status());
+                                            }
+                                        }).switchIfEmpty(Single.defer(new Callable<SingleSource<? extends OperationStatus<?>>>() {
+                                            @Override
+                                            public SingleSource<? extends OperationStatus<?>> call() throws Exception {
+                                                return Single.just(new OperationStatus<>((Object) null, pollStrategy.status()));
+                                            }
+                                        })).toObservable();
+                                Observable<OperationStatus<Object>> rest = pollStrategy.pollUntilDoneWithStatusUpdates(httpRequest, methodParser, operationStatusResultType);
+                                return first.concatWith(rest);
+                            }
+                        });
+                    }
+                });
             }
         }
         else {
@@ -286,7 +308,7 @@ public final class AzureProxy extends RestProxy {
                                         final Long parsedDelayInMilliseconds = PollStrategy.delayInMillisecondsFrom(originalHttpResponse);
                                         final long delayInMilliseconds = parsedDelayInMilliseconds != null ? parsedDelayInMilliseconds : AzureProxy.defaultDelayInMilliseconds();
 
-                                        final String originalHttpRequestMethod = originalHttpRequest.httpMethod();
+                                        final HttpMethod originalHttpRequestMethod = originalHttpRequest.httpMethod();
 
                                         PollStrategy pollStrategy = null;
                                         if (httpStatusCode == 200) {
@@ -298,7 +320,7 @@ public final class AzureProxy extends RestProxy {
                                                 result = createProvisioningStateOrCompletedPollStrategy(originalHttpRequest, originalHttpResponse, methodParser, delayInMilliseconds);
                                             }
                                         }
-                                        else if (originalHttpRequestMethod.equalsIgnoreCase("PUT") || originalHttpRequestMethod.equalsIgnoreCase("PATCH")) {
+                                        else if (originalHttpRequestMethod == HttpMethod.PUT || originalHttpRequestMethod == HttpMethod.PATCH) {
                                             if (httpStatusCode == 201) {
                                                 pollStrategy = AzureAsyncOperationPollStrategy.tryToCreate(AzureProxy.this, methodParser, originalHttpRequest, originalHttpResponse, delayInMilliseconds);
                                                 if (pollStrategy == null) {
@@ -341,10 +363,10 @@ public final class AzureProxy extends RestProxy {
     private Single<PollStrategy> createProvisioningStateOrCompletedPollStrategy(final HttpRequest httpRequest, HttpResponse httpResponse, final SwaggerMethodParser methodParser, final long delayInMilliseconds) {
         Single<PollStrategy> result;
 
-        final String httpRequestMethod = httpRequest.httpMethod();
-        if (httpRequestMethod.equalsIgnoreCase("DELETE")
-                || httpRequestMethod.equalsIgnoreCase("GET")
-                || httpRequestMethod.equalsIgnoreCase("HEAD")
+        final HttpMethod httpRequestMethod = httpRequest.httpMethod();
+        if (httpRequestMethod == HttpMethod.DELETE
+                || httpRequestMethod == HttpMethod.GET
+                || httpRequestMethod == HttpMethod.HEAD
                 || !methodParser.expectsResponseBody()) {
             result = Single.<PollStrategy>just(new CompletedPollStrategy(AzureProxy.this, methodParser, httpResponse));
         } else {

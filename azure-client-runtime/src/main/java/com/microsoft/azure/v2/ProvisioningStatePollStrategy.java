@@ -8,6 +8,7 @@ package com.microsoft.azure.v2;
 
 import com.microsoft.rest.v2.RestProxy;
 import com.microsoft.rest.v2.SwaggerMethodParser;
+import com.microsoft.rest.v2.http.HttpMethod;
 import com.microsoft.rest.v2.http.HttpRequest;
 import com.microsoft.rest.v2.http.HttpResponse;
 import io.reactivex.Single;
@@ -21,17 +22,19 @@ import java.io.IOException;
  */
 public class ProvisioningStatePollStrategy extends PollStrategy {
     private final HttpRequest originalRequest;
+    private final SwaggerMethodParser methodParser;
 
     ProvisioningStatePollStrategy(RestProxy restProxy, SwaggerMethodParser methodParser, HttpRequest originalRequest, String provisioningState, long delayInMilliseconds) {
         super(restProxy, methodParser, delayInMilliseconds);
 
         this.originalRequest = originalRequest;
+        this.methodParser = methodParser;
         setStatus(provisioningState);
     }
 
     @Override
     HttpRequest createPollRequest() {
-        return new HttpRequest(originalRequest.callerMethod(), "GET", originalRequest.url());
+        return new HttpRequest(originalRequest.callerMethod(), HttpMethod.GET, originalRequest.url());
     }
 
     @Override
@@ -52,7 +55,11 @@ public class ProvisioningStatePollStrategy extends PollStrategy {
                                             }
 
                                             if (resource == null || resource.properties() == null || resource.properties().provisioningState() == null) {
-                                                throw new CloudException("The polling response does not contain a valid body", bufferedHttpPollResponse, null);
+                                                if (methodParser.isExpectedResponseStatusCode(bufferedHttpPollResponse.statusCode())) {
+                                                   setStatus(OperationState.SUCCEEDED);
+                                                } else {
+                                                    setStatus(OperationState.FAILED);
+                                                }
                                             }
                                             else if (OperationState.isFailedOrCanceled(resource.properties().provisioningState())) {
                                                 throw new CloudException("Async operation failed with provisioning state: " + resource.properties().provisioningState(), bufferedHttpPollResponse);

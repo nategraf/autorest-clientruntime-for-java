@@ -6,19 +6,19 @@
 
 package com.microsoft.rest.v2;
 
-import com.microsoft.rest.v2.http.HttpClient;
+import com.microsoft.rest.v2.http.HttpMethod;
 import com.microsoft.rest.v2.http.HttpPipeline;
 import com.microsoft.rest.v2.http.HttpRequest;
 import com.microsoft.rest.v2.http.HttpResponse;
 import com.microsoft.rest.v2.http.MockHttpClient;
 import com.microsoft.rest.v2.http.MockHttpResponse;
-import com.microsoft.rest.v2.policy.UserAgentPolicy;
+import com.microsoft.rest.v2.policy.UserAgentPolicyFactory;
 import org.junit.Assert;
 import org.junit.Test;
 
 import io.reactivex.Single;
 
-import java.util.Collections;
+import java.net.URL;
 
 public class UserAgentTests {
     @Test
@@ -33,11 +33,11 @@ public class UserAgentTests {
                     return Single.<HttpResponse>just(new MockHttpResponse(200));
                 }
             },
-            new UserAgentPolicy.Factory("AutoRest-Java"));
+            new UserAgentPolicyFactory("AutoRest-Java"));
 
         HttpResponse response = pipeline.sendRequestAsync(new HttpRequest(
                 "defaultUserAgentTests",
-                "GET", "http://localhost")).blockingGet();
+                HttpMethod.GET, new URL("http://localhost"))).blockingGet();
 
         Assert.assertEquals(200, response.statusCode());
     }
@@ -53,9 +53,9 @@ public class UserAgentTests {
                     return Single.<HttpResponse>just(new MockHttpResponse(200));
                 }
             },
-            new UserAgentPolicy.Factory("Awesome"));
+            new UserAgentPolicyFactory("Awesome"));
 
-        HttpResponse response = pipeline.sendRequestAsync(new HttpRequest("customUserAgentTests", "GET", "http://localhost")).blockingGet();
+        HttpResponse response = pipeline.sendRequestAsync(new HttpRequest("customUserAgentTests", HttpMethod.GET, new URL("http://localhost"))).blockingGet();
         Assert.assertEquals(200, response.statusCode());
     }
 }

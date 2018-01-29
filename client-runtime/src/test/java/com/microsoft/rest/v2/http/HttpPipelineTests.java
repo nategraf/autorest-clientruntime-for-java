@@ -1,21 +1,19 @@
 package com.microsoft.rest.v2.http;
 
-import com.microsoft.rest.v2.http.HttpClient;
-import com.microsoft.rest.v2.http.HttpPipeline;
-import com.microsoft.rest.v2.http.HttpRequest;
-import com.microsoft.rest.v2.http.HttpResponse;
-import com.microsoft.rest.v2.http.MockHttpResponse;
-import com.microsoft.rest.v2.policy.RequestIdPolicy;
+import com.microsoft.rest.v2.policy.RequestIdPolicyFactory;
 import org.junit.Test;
 import io.reactivex.Single;
+
+import java.net.MalformedURLException;
+import java.net.URL;
 
 import static org.junit.Assert.*;
 
 public class HttpPipelineTests {
     @Test
-    public void withNoRequestPolicies() {
-        final String expectedHttpMethod = "GET";
-        final String expectedUrl = "http://my.site.com";
+    public void withNoRequestPolicies() throws MalformedURLException {
+        final HttpMethod expectedHttpMethod = HttpMethod.GET;
+        final URL expectedUrl = new URL("http://my.site.com");
         final HttpPipeline httpPipeline = HttpPipeline.build(new HttpClient() {
             @Override
             public Single<HttpResponse> sendRequestAsync(HttpRequest request) {
@@ -32,9 +30,9 @@ public class HttpPipelineTests {
     }
 
     @Test
-    public void withUserAgentRequestPolicy() {
-        final String expectedHttpMethod = "GET";
-        final String expectedUrl = "http://my.site.com/1";
+    public void withUserAgentRequestPolicy() throws MalformedURLException {
+        final HttpMethod expectedHttpMethod = HttpMethod.GET;
+        final URL expectedUrl = new URL("http://my.site.com/1");
         final String expectedUserAgent = "my-user-agent";
         final HttpClient httpClient = new HttpClient() {
             @Override
@@ -56,9 +54,9 @@ public class HttpPipelineTests {
     }
 
     @Test
-    public void withRequestIdRequestPolicy() {
-        final String expectedHttpMethod = "GET";
-        final String expectedUrl = "http://my.site.com/1";
+    public void withRequestIdRequestPolicy() throws MalformedURLException {
+        final HttpMethod expectedHttpMethod = HttpMethod.GET;
+        final URL expectedUrl = new URL("http://my.site.com/1");
         final HttpPipeline httpPipeline = HttpPipeline.build(
                 new HttpClient() {
                     @Override
@@ -73,7 +71,7 @@ public class HttpPipelineTests {
                         return Single.<HttpResponse>just(new MockHttpResponse(200));
                     }
                 },
-                new RequestIdPolicy.Factory());
+                new RequestIdPolicyFactory());
         final HttpResponse response = httpPipeline.sendRequestAsync(new HttpRequest("MOCK_CALLER_METHOD", expectedHttpMethod, expectedUrl)).blockingGet();
         assertNotNull(response);
         assertEquals(200, response.statusCode());

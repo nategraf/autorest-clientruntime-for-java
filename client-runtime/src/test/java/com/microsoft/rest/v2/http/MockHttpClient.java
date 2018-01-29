@@ -7,23 +7,16 @@
 package com.microsoft.rest.v2.http;
 
 import com.google.common.base.Charsets;
-import com.google.common.io.ByteArrayDataOutput;
-import com.google.common.io.ByteStreams;
-import com.google.common.io.CharStreams;
 import com.microsoft.rest.v2.Base64Url;
 import com.microsoft.rest.v2.DateTimeRfc1123;
 import com.microsoft.rest.v2.entities.HttpBinJSON;
 import com.microsoft.rest.v2.util.FlowableUtil;
-import io.reactivex.exceptions.Exceptions;
-import io.reactivex.functions.BiConsumer;
 import io.reactivex.functions.Function;
 import org.joda.time.DateTime;
 import io.reactivex.Single;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.URI;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -46,7 +39,7 @@ public class MockHttpClient extends HttpClient {
         HttpResponse response = null;
 
         try {
-            final URI requestUrl = new URI(request.url());
+            final URL requestUrl = request.url();
             final String requestHost = requestUrl.getHost();
             if ("httpbin.org".equalsIgnoreCase(requestHost)) {
                 final String requestPath = requestUrl.getPath();
@@ -56,7 +49,7 @@ public class MockHttpClient extends HttpClient {
                         response = new MockHttpResponse(200, "");
                     } else {
                         final HttpBinJSON json = new HttpBinJSON();
-                        json.url = request.url()
+                        json.url = request.url().toString()
                                 // This is just to mimic the behavior we've seen with httpbin.org.
                                 .replace("%20", " ");
                         json.headers = toMap(request.headers());
@@ -138,31 +131,31 @@ public class MockHttpClient extends HttpClient {
                 }
                 else if (requestPathLower.equals("/delete")) {
                     final HttpBinJSON json = new HttpBinJSON();
-                    json.url = request.url();
+                    json.url = request.url().toString();
                     json.data = bodyToString(request);
                     response = new MockHttpResponse(200, json);
                 }
                 else if (requestPathLower.equals("/get")) {
                     final HttpBinJSON json = new HttpBinJSON();
-                    json.url = request.url();
+                    json.url = request.url().toString();
                     json.headers = toMap(request.headers());
                     response = new MockHttpResponse(200, json);
                 }
                 else if (requestPathLower.equals("/patch")) {
                     final HttpBinJSON json = new HttpBinJSON();
-                    json.url = request.url();
+                    json.url = request.url().toString();
                     json.data = bodyToString(request);
                     response = new MockHttpResponse(200, json);
                 }
                 else if (requestPathLower.equals("/post")) {
                     final HttpBinJSON json = new HttpBinJSON();
-                    json.url = request.url();
+                    json.url = request.url().toString();
                     json.data = bodyToString(request);
                     response = new MockHttpResponse(200, json);
                 }
                 else if (requestPathLower.equals("/put")) {
                     final HttpBinJSON json = new HttpBinJSON();
-                    json.url = request.url();
+                    json.url = request.url().toString();
                     json.data = bodyToString(request);
                     response = new MockHttpResponse(200, responseHeaders, json);
                 }
@@ -173,8 +166,8 @@ public class MockHttpClient extends HttpClient {
                 }
             }
         }
-        catch (Exception ignored) {
-            throw Exceptions.propagate(ignored);
+        catch (Exception ex) {
+            return Single.error(ex);
         }
 
         if (response == null) {
@@ -187,7 +180,7 @@ public class MockHttpClient extends HttpClient {
     private static String bodyToString(HttpRequest request) throws IOException {
         String body = "";
         if (request.body() != null) {
-            Single<String> asyncString = FlowableUtil.collectBytes(request.body().content())
+            Single<String> asyncString = FlowableUtil.collectBytes(request.body())
                     .map(new Function<byte[], String>() {
                 @Override
                 public String apply(byte[] bytes) throws Exception {

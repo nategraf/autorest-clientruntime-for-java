@@ -9,8 +9,9 @@ package com.microsoft.rest.v2;
 import com.microsoft.rest.v2.credentials.BasicAuthenticationCredentials;
 import com.microsoft.rest.v2.credentials.TokenCredentials;
 
+import com.microsoft.rest.v2.http.HttpMethod;
 import com.microsoft.rest.v2.http.HttpPipeline;
-import com.microsoft.rest.v2.policy.CredentialsPolicy;
+import com.microsoft.rest.v2.policy.CredentialsPolicyFactory;
 import com.microsoft.rest.v2.http.HttpRequest;
 import com.microsoft.rest.v2.http.HttpResponse;
 import com.microsoft.rest.v2.http.MockHttpClient;
@@ -20,6 +21,8 @@ import com.microsoft.rest.v2.policy.RequestPolicyOptions;
 import org.junit.Assert;
 import org.junit.Test;
 import io.reactivex.Single;
+
+import java.net.URL;
 
 public class CredentialsTests {
 
@@ -43,10 +46,10 @@ public class CredentialsTests {
 
         final HttpPipeline pipeline = HttpPipeline.build(
                 new MockHttpClient(),
-                new CredentialsPolicy.Factory(credentials),
+                new CredentialsPolicyFactory(credentials),
                 auditorFactory);
 
-        HttpRequest request = new HttpRequest("basicCredentialsTest", "GET", "http://localhost");
+        HttpRequest request = new HttpRequest("basicCredentialsTest", HttpMethod.GET, new URL("http://localhost"));
         pipeline.sendRequestAsync(request).blockingGet();
     }
 
@@ -70,10 +73,10 @@ public class CredentialsTests {
 
         HttpPipeline pipeline = HttpPipeline.build(
                 new MockHttpClient(),
-                new CredentialsPolicy.Factory(credentials),
+                new CredentialsPolicyFactory(credentials),
                 auditorFactory);
 
-        HttpRequest request = new HttpRequest("basicCredentialsTest", "GET", "http://localhost");
+        HttpRequest request = new HttpRequest("basicCredentialsTest", HttpMethod.GET, new URL("http://localhost"));
         pipeline.sendRequestAsync(request).blockingGet();
     }
 }

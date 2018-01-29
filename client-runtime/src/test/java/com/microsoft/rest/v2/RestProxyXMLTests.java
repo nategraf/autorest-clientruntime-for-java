@@ -21,6 +21,7 @@ import com.microsoft.rest.v2.entities.SignedIdentifiersWrapper;
 import com.microsoft.rest.v2.entities.Slideshow;
 import com.microsoft.rest.v2.http.HttpClient;
 import com.microsoft.rest.v2.http.HttpHeaders;
+import com.microsoft.rest.v2.http.HttpMethod;
 import com.microsoft.rest.v2.http.HttpPipeline;
 import com.microsoft.rest.v2.http.HttpRequest;
 import com.microsoft.rest.v2.http.HttpResponse;
@@ -60,9 +61,9 @@ public class RestProxyXMLTests {
         @Override
         public Single<HttpResponse> sendRequestAsync(HttpRequest request) {
             try {
-                if (request.url().endsWith("GetContainerACLs")) {
+                if (request.url().toString().endsWith("GetContainerACLs")) {
                     return Single.just(response("GetContainerACLs.xml"));
-                } else if (request.url().endsWith("GetXMLWithAttributes")) {
+                } else if (request.url().toString().endsWith("GetXMLWithAttributes")) {
                     return Single.just(response("GetXMLWithAttributes.xml"));
                 } else {
                     return Single.<HttpResponse>just(new MockHttpResponse(404));
@@ -95,8 +96,8 @@ public class RestProxyXMLTests {
 
         @Override
         public Single<HttpResponse> sendRequestAsync(HttpRequest request) {
-            if (request.url().endsWith("SetContainerACLs")) {
-                return FlowableUtil.collectBytes(request.body().content())
+            if (request.url().toString().endsWith("SetContainerACLs")) {
+                return FlowableUtil.collectBytes(request.body())
                         .map(new Function<byte[], HttpResponse>() {
                             @Override
                             public HttpResponse apply(byte[] bytes) throws Exception {
@@ -114,8 +115,8 @@ public class RestProxyXMLTests {
     public void canWriteXMLRequest() throws Exception {
         URL url = getClass().getClassLoader().getResource("GetContainerACLs.xml");
         byte[] bytes = Files.readAllBytes(Paths.get(url.toURI()));
-        HttpRequest request = new HttpRequest("canWriteXMLRequest", "PUT", "http://unused/SetContainerACLs");
-        request.withBody(bytes, "application/xml");
+        HttpRequest request = new HttpRequest("canWriteXMLRequest", HttpMethod.PUT, new URL("http://unused/SetContainerACLs"));
+        request.withBody(bytes);
 
         SignedIdentifierInner si = new SignedIdentifierInner();
         si.withId("MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI=");
