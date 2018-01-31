@@ -147,14 +147,10 @@ public class RestProxyStressTests {
     interface IOService {
         @ExpectedResponses({ 201 })
         @PUT("/sdkbenchmark2/upload/100m-{id}.dat?{sas}")
-        Single<RestResponse<Void, Void>> upload100MB(@PathParam("id") String id, @PathParam(value = "sas", encoded = true) String sas, @HeaderParam("x-ms-blob-type") String blobType, @BodyParam(ContentType.APPLICATION_OCTET_STREAM) AsyncInputStream stream);
-
-        @ExpectedResponses({ 201 })
-        @PUT("/sdkbenchmark2/upload/100m-{id}.dat?{sas}")
-        Single<RestResponse<Void, Void>> upload100MBFile(@PathParam("id") String id, @PathParam(value = "sas", encoded = true) String sas, @HeaderParam("x-ms-blob-type") String blobType, @BodyParam(ContentType.APPLICATION_OCTET_STREAM) FileSegment segment);
+        Single<RestResponse<Void, Void>> upload100MB(@PathParam("id") String id, @PathParam(value = "sas", encoded = true) String sas, @HeaderParam("x-ms-blob-type") String blobType, @BodyParam(ContentType.APPLICATION_OCTET_STREAM) Flowable<byte[]> stream, @HeaderParam("content-length") long contentLength);
 
         @GET("/sdkbenchmark2/upload/100m-{id}.dat?{sas}")
-        Single<RestResponse<Void, AsyncInputStream>> download100M(@PathParam("id") String id, @PathParam(value = "sas", encoded = true) String sas);
+        Single<RestResponse<Void, Flowable<byte[]>>> download100M(@PathParam("id") String id, @PathParam(value = "sas", encoded = true) String sas);
     }
 
     private static final Path TEMP_FOLDER_PATH = Paths.get(System.getProperty("java.io.tmpdir")).resolve("storage-benchmark");
