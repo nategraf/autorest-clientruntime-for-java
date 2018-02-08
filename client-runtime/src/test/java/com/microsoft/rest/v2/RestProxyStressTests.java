@@ -47,6 +47,7 @@ import org.joda.time.format.PeriodFormat;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscription;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
@@ -154,8 +155,8 @@ public class RestProxyStressTests {
     }
 
     private static final Path TEMP_FOLDER_PATH = Paths.get(System.getProperty("java.io.tmpdir")).resolve("storage-benchmark");
-    private static final int NUM_FILES = 100;
-    private static final int FILE_SIZE = 1024 * 1024 * 100;
+    private static final int NUM_FILES = System.getenv("NUM_FILES") != null ? Integer.parseInt(System.getenv("NUM_FILES")) : 100;
+    private static final int FILE_SIZE = System.getenv("FILE_SIZE") != null ? Integer.parseInt(System.getenv("FILE_SIZE")) : 1024 * 1024 * 100;
     private static final int CHUNK_SIZE = 8192;
     private static final int CHUNKS_PER_FILE = FILE_SIZE / CHUNK_SIZE;
 
@@ -215,13 +216,13 @@ public class RestProxyStressTests {
                 final AsynchronousFileChannel file = AsynchronousFileChannel.open(filePath, StandardOpenOption.READ, StandardOpenOption.WRITE);
                 final MessageDigest messageDigest = MessageDigest.getInstance("MD5");
 
-                Flowable<byte[]> fileContent = contentGenerator.take(CHUNKS_PER_FILE).doOnNext(new Consumer<byte[]>() {
+                Flowable<byte[]> fileContent = contentGenerator.take(CHUNKS_PER_FILE).map(new Function<byte[], byte[]>() {
                     @Override
-                    public void accept(byte[] bytes) throws Exception {
+                    public byte[] apply(byte[] bytes) throws Exception {
                         messageDigest.update(bytes);
+                        return bytes;
                     }
                 });
-
                 return FlowableUtil.writeFile(fileContent, file).andThen(Completable.defer(new Callable<CompletableSource>() {
                     @Override
                     public CompletableSource call() throws Exception {
@@ -233,6 +234,73 @@ public class RestProxyStressTests {
                 }));
             }
         }).blockingAwait();
+    }
+
+    @Test
+    public void uploadParallelTest() throws Exception {
+        final Flowable<byte[]> contentGenerator = Flowable.generate(new Callable<Random>() {
+            @Override
+            public Random call() throws Exception {
+                return new Random();
+            }
+        }, new BiConsumer<Random, Emitter<byte[]>>() {
+            @Override
+            public void accept(Random random, Emitter<byte[]> emitter) throws Exception {
+                byte[] buf = new byte[CHUNK_SIZE];
+                random.nextBytes(buf);
+                emitter.onNext(buf);
+            }
+        });
+
+        final String sas = System.getenv("JAVA_SDK_TEST_SAS");
+        HttpHeaders headers = new HttpHeaders()
+                .set("x-ms-version", "2017-04-17");
+
+        HttpPipeline pipeline = HttpPipeline.build(
+                new AddDatePolicyFactory(),
+                new AddHeadersPolicyFactory(headers),
+                new ThrottlingRetryPolicyFactory(),
+                new HttpLoggingPolicyFactory(HttpLogDetailLevel.BASIC));
+
+        final IOService service = RestProxy.create(IOService.class, pipeline);
+
+        if (!Files.exists(TEMP_FOLDER_PATH)) {
+            Files.createDirectory(TEMP_FOLDER_PATH);
+        }
+
+        Instant start = Instant.now();
+        Flowable.range(0, NUM_FILES).flatMapCompletable(new Function<Integer, Completable>() {
+            @Override
+            public Completable apply(final Integer id) throws Exception {
+                final MessageDigest messageDigest = MessageDigest.getInstance("MD5");
+                Flowable<byte[]> stream = contentGenerator.take(CHUNKS_PER_FILE).doOnNext(new Consumer<byte[]>() {
+                    @Override
+                    public void accept(byte[] bytes) throws Exception {
+                        messageDigest.update(bytes);
+                    }
+                }).doOnSubscribe(new Consumer<Subscription>() {
+                    @Override
+                    public void accept(Subscription sub) {
+                        messageDigest.reset();
+                    }
+                });
+
+                return service.upload100MB(String.valueOf(id), sas, "BlockBlob", stream, FILE_SIZE).flatMapCompletable(new Function<RestResponse<Void, Void>, CompletableSource>() {
+                    @Override
+                    public CompletableSource apply(RestResponse<Void, Void> response) throws Exception {
+                        String base64MD5 = response.rawHeaders().get("Content-MD5");
+                        byte[] receivedMD5 = BaseEncoding.base64().decode(base64MD5);
+                        byte[] md5 = messageDigest.digest();
+                        assertArrayEquals(md5, receivedMD5);
+                        Files.write(TEMP_FOLDER_PATH.resolve("100m-" + id + "-md5.dat"), md5);
+                        return Completable.complete();
+                    }
+                });
+            }
+        }, false, 30).blockingAwait();
+
+        String timeTakenString = PeriodFormat.getDefault().print(new Duration(start, Instant.now()).toPeriod());
+        LoggerFactory.getLogger(getClass()).info("Upload took " + timeTakenString);
     }
 
     @Test
